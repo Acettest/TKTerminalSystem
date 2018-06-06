@@ -199,8 +199,6 @@ userrole.id as UserRoleId,userrole.RoleName from userinfo,userrole WHERE userinf
             return result;
         }
 
-        #endregion 根据专线类型获取即时拨测日志表
-
         #region 根据专线类型获取档案信息表
 
         /// <summary>
