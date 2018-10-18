@@ -3,400 +3,337 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Web.Services;
-
+using System.Linq;
 namespace TKTerminalSystem
 {
-    /// <summary>
-    /// TKTerminal 的摘要说明
-    /// </summary>
     [WebService(Namespace = "http://tempuri.org/")]
     [WebServiceBinding(ConformsTo = WsiProfiles.BasicProfile1_1)]
-    [System.ComponentModel.ToolboxItem(false)]
-    // 若要允许使用 ASP.NET AJAX 从脚本中调用此 Web 服务，请取消注释以下行。
-    // [System.Web.Script.Services.ScriptService]
-    public class TKTerminal : System.Web.Services.WebService
+    [ToolboxItem(false)]
+    public class TKTerminal : WebService
     {
-
-        #region WebService公开方法
-
-        #region 即时测试
-        /// <summary>
-        /// 即时测试
-        /// </summary>
-        /// <param name="particularTestType">eg:ping测试</param>
-        /// <param name="lineTypeName">eg:短彩专线</param>
-        /// <param name="lineTypeName">eg:测试专线名称</param>
-        /// <param name="testItemNameTemp">eg:测试项目名称</param>
-        /// <param name="username">用户名，用于生成任务名称</param>
         [WebMethod(Description = "即时拨测")]
-        public string ImmediateTest(string lineTypeName, string particularTestType, string testItemUrl, string testLine, string testItemNameTemp, string username)
+        public void ImmediateTest(string lineTypeName, string particularTestType, string testItemUrl, string testLine, string testItemNameTemp, string username)
+        {
+            ResponseJson(GetImmediateTest(lineTypeName, particularTestType, testItemUrl, testLine, testItemNameTemp, username));
+        }
+
+        private string GetImmediateTest(string lineTypeName, string particularTestType, string testItemUrl, string testLine, string testItemNameTemp, string username)
         {
             try
             {
-                //string lineTypeName = Request.QueryString["lineTypeName"].Trim();
                 string GuardTable = GetLineTypeGuardTable(lineTypeName);
-                string sqlLineAndTerminal = "SELECT terminal.`Name`," + GuardTable + ".LineName ," + GuardTable + ".City "
-                + "from " + GuardTable + ",terminal WHERE " + GuardTable + ".TerminalID=terminal.ID;";
+                string sqlLineAndTerminal = "SELECT terminal.`Name`," + GuardTable + ".LineName ," + GuardTable + ".City from " + GuardTable + ",terminal WHERE " + GuardTable + ".TerminalID=terminal.ID;";
                 DataTable dtLineAndTerminal = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlLineAndTerminal).Tables[0];
-
-                string TaskName = particularTestType + "_" + username//Session["username"].ToString() + "_"
-                    + DateTime.Now.ToString("yyyyMMdd") + "_" + DateTime.Now.ToString("HHmmss");
-                string TestTypeName = particularTestType;
-                string TestItemName = "";
+                string[] obj = new string[6]
+                {
+                    particularTestType,
+                    "_",
+                    username,
+                    null,
+                    null,
+                    null
+                };
+                DateTime now = DateTime.Now;
+                obj[3] = now.ToString("yyyyMMdd");
+                obj[4] = "_";
+                now = DateTime.Now;
+                obj[5] = now.ToString("HHmmss");
+                string TaskName = string.Concat(obj);
+                string TestItemName2 = "";
                 string TestCounts = "1";
-                DataRow[] line = dtLineAndTerminal.Select("LineName='" + testLine + "'");
-                string city = line[0]["City"].ToString().Trim();
-
-                //string username = Session["username"].ToString();
-                string TestDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                string TestState = "0";
-
-                #region 任务参数组合
-                StringBuilder sbJson = new StringBuilder();
-                switch (lineTypeName)
+                if (lineTypeName == "短彩专线" || lineTypeName == "语音专线")
                 {
-                    default:
-                        #region
-                        sbJson.Append("{\"LineItems\":[");
-                        string[] arrayLine = testLine.Split(',');
-                        DataTable dt = null;
-                        if (lineTypeName == "短彩专线")
-                        {
-                            string sqlLine1 = "select LineName,MasIP as ip,LineKey from guard_smsmms where linename in('" +
-                            testLine.Replace(",", "','") + "');";
-                            dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlLine1).Tables[0];
-                        }
-                        else if (lineTypeName == "语音专线")
-                        {
-                            string sqlLine1 = "select LineName,ImsIP as ip,LineKey from guard_voice where linename in('" +
-                            testLine.Replace(",", "','") + "');";
-                            dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlLine1).Tables[0];
-                        }
-                        else
-                        {
-                            string sqlLine1 = "select LineName,LineKey from line_config where linename in('" +
-                            testLine.Replace(",", "','") + "');";
-                            dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlLine1).Tables[0];
-                        }
-                        for (int index = 0; index < arrayLine.Length; index++)
-                        {
-                            string LineName = arrayLine[index].Trim();
-                            string Line_IP = string.Empty;
-                            string Line_IP_Key = string.Empty;
-                            //string testItemNameTemp = string.Empty;
-                            string LineKey = string.Empty;
-                            if (dt.Rows.Count > 0)
-                            {
-                                LineKey = dt.Select("LineName='" + LineName + "'")[0]["LineKey"].ToString().Trim();
-                            }
-                            if (lineTypeName == "短彩专线")
-                            {
-                                Line_IP_Key = "MasIP";
-                                //testItemNameTemp = this.ddlHM.SelectedValue.Trim();//短信的测试号码
-                                if (dt.Rows.Count > 0)
-                                {
-                                    Line_IP = dt.Select("LineName='" + LineName + "'")[0]["ip"].ToString().Trim();
-                                }
-                            }
-                            else if (lineTypeName == "语音专线")
-                            {
-                                Line_IP_Key = "ImsIP";
-                                if (dt.Rows.Count > 0)
-                                {
-                                    Line_IP = dt.Select("LineName='" + LineName + "'")[0]["ip"].ToString().Trim();
-                                }
-                                //testItemNameTemp = this.tbItemName.Text.Trim();//语音的测试号码
-                            }
-                            else
-                            {
-                                //testItemNameTemp = this.tbItemName.Text.Trim();//即时测试的第三个文本框
-                            }
-                            sbJson.Append("{");
-                            sbJson.Append("\"LineTestItem\":[");
-                            sbJson.Append("{\"TestItemName\":\""); sbJson.Append(testItemNameTemp); sbJson.Append("\",");
-                            sbJson.Append("\"TestItemUrl\":\""); sbJson.Append(testItemUrl); sbJson.Append("\"");
-                            sbJson.Append("}");
-                            sbJson.Append("],");
-                            TestItemName = testItemNameTemp + "(" + testItemUrl + ")";
-                            sbJson.Append("\"LineName\":\""); sbJson.Append(LineName); sbJson.Append("\",");
-                            sbJson.Append("\"City\":\""); sbJson.Append(city); sbJson.Append("\",");
-                            sbJson.Append("\"LineKey\":\""); sbJson.Append(LineKey); sbJson.Append("\",\"TerminalName\":\"");
-                            string TerminalName = string.Empty;
-                            DataRow[] dr = dtLineAndTerminal.Select("LineName='" + LineName + "'");
-                            if (dr.Length > 0)
-                            {
-                                TerminalName = dr[0]["Name"].ToString();
-                            }
-                            sbJson.Append(TerminalName);
-                            sbJson.Append("\"");
-                            if (!string.IsNullOrEmpty(Line_IP))
-                            {
-                                sbJson.Append(",");
-                                sbJson.Append("\""); sbJson.Append(Line_IP_Key); sbJson.Append("\":\"");
-                                sbJson.Append(Line_IP); sbJson.Append("\"");
-                            }
-                            sbJson.Append("}");
-                            if (index + 1 != arrayLine.Length)
-                            {
-                                sbJson.Append(",");
-                            }
-                        }
-                        sbJson.Append("],");
-                        sbJson.Append("\"TaskName\":\""); sbJson.Append(TaskName); sbJson.Append("\",");
-                        sbJson.Append("\"TestType\":\""); sbJson.Append(TestTypeName); sbJson.Append("\",");
-                        sbJson.Append("\"TestTimes\":\""); sbJson.Append(TestCounts); sbJson.Append("\"");
-                        sbJson.Append("}");
-                        #endregion 任务参数组合
-                        break;
-                }
-
-                #endregion 即时拨测
-                string sql = "insert into instanttest_task (lineTypeName,TaskName,TestTypeName,testLine,"
-                + "TestItemName,TestCounts,username,TestDate,TestState,City) values"
-                + "('" + lineTypeName + "','" + TaskName + "','" + TestTypeName + "','" + testLine + "','"
-                + TestItemName + "','" + TestCounts + "','" + username + "','" + TestDate + "','" + TestState + "','" + city + "');";
-                //QLog.SendLog("【连通性验证】" + this.hfLineType.Value.Trim() + "：" + sbJson.ToString());
-
-                #region 发送任务到接口
-                WebClient web = new WebClient();
-                try
-                {
-                    WebHeaderCollection headers = new WebHeaderCollection();
-                    headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded; charset=GB2312";
-                    web.Headers = headers;
-                    string url = string.Format(ConnConfig.WebAPI + "ImmediateTest");
-                    string data = "TaskContent=" + this.Server.UrlEncode(sbJson.ToString());
-                    string result = web.UploadString(url, "POST", data);
-                    string ja = JsonConvert.DeserializeObject(result).ToString();
-                    JObject jsonObj = JObject.Parse((ja));
-                    if (jsonObj["Result"].ToString().Trim().ToLower() == "true")
+                    string lineMatch = "SELECT `TechquickLine`,`EastcomquickLine` FROM `eastcomlinematch`";
+                    DataTable lineMatchTable = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, lineMatch).Tables[0];
+                    DataRow[] matchlineRow = lineMatchTable.Select("EastcomquickLine='" + testLine + "'");
+                    if (matchlineRow.Length == 0)
                     {
+                        string err4 = "所测专线不在系统支持范围！";
+                        return "{\"Success\":false,\"Message\":" + err4 + ",\"Results\":[]}";
+                    }
+                    testLine = matchlineRow[0]["TechquickLine"].ToString().Trim();
+                }
+                DataRow[] line = dtLineAndTerminal.Select("LineName='" + testLine + "'");
+                if (line.Length != 0)
+                {
+                    string city = line[0]["City"].ToString().Trim();
+                    now = DateTime.Now;
+                    string TestDate = now.ToString("yyyy-MM-dd HH:mm:ss");
+                    string TestState = "0";
+                    StringBuilder sbJson = new StringBuilder();
+                    sbJson.Append("{\"LineItems\":[");
+                    DataTable dt2 = null;
+                    if (lineTypeName == "短彩专线")
+                    {
+                        string sqlLine3 = "select LineName,MasIP as ip,LineKey from guard_smsmms where linename = '" + testLine + "';";
+                        dt2 = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlLine3).Tables[0];
+                    }
+                    else if (lineTypeName == "语音专线")
+                    {
+                        string sqlLine2 = "select LineName,ImsIP as ip,LineKey from guard_voice where linename = '" + testLine + "';";
+                        dt2 = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlLine2).Tables[0];
+                    }
+                    else
+                    {
+                        string sqlLine = "select LineName,LineKey from line_config where linename = '" + testLine + "';";
+                        dt2 = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlLine).Tables[0];
+                    }
+                    string LineName = testLine.Trim();
+                    string Line_IP = string.Empty;
+                    string Line_IP_Key = string.Empty;
+                    string LineKey = string.Empty;
+                    if (dt2.Rows.Count > 0)
+                    {
+                        LineKey = dt2.Select("LineName='" + LineName + "'")[0]["LineKey"].ToString().Trim();
+                    }
+                    if (lineTypeName == "短彩专线")
+                    {
+                        Line_IP_Key = "MasIP";
+                        if (dt2.Rows.Count > 0)
+                        {
+                            Line_IP = dt2.Select("LineName='" + LineName + "'")[0]["ip"].ToString().Trim();
+                        }
+                    }
+                    else if (lineTypeName == "语音专线")
+                    {
+                        Line_IP_Key = "ImsIP";
+                        if (dt2.Rows.Count > 0)
+                        {
+                            Line_IP = dt2.Select("LineName='" + LineName + "'")[0]["ip"].ToString().Trim();
+                        }
+                    }
+                    sbJson.Append("{");
+                    sbJson.Append("\"LineTestItem\":[");
+                    sbJson.Append("{\"TestItemName\":\"");
+                    sbJson.Append(testItemNameTemp);
+                    sbJson.Append("\",");
+                    sbJson.Append("\"TestItemUrl\":\"");
+                    sbJson.Append(testItemUrl);
+                    sbJson.Append("\"");
+                    sbJson.Append("}");
+                    sbJson.Append("],");
+                    TestItemName2 = testItemNameTemp + "(" + testItemUrl + ")";
+                    sbJson.Append("\"LineName\":\"");
+                    sbJson.Append(LineName);
+                    sbJson.Append("\",");
+                    sbJson.Append("\"City\":\"");
+                    sbJson.Append(city);
+                    sbJson.Append("\",");
+                    sbJson.Append("\"LineKey\":\"");
+                    sbJson.Append(LineKey);
+                    sbJson.Append("\",\"TerminalName\":\"");
+                    string TerminalName = string.Empty;
+                    DataRow[] dr = dtLineAndTerminal.Select("LineName='" + LineName + "'");
+                    if (dr.Length != 0)
+                    {
+                        TerminalName = dr[0]["Name"].ToString();
+                    }
+                    sbJson.Append(TerminalName);
+                    sbJson.Append("\"");
+                    if (!string.IsNullOrEmpty(Line_IP))
+                    {
+                        sbJson.Append(",");
+                        sbJson.Append("\"");
+                        sbJson.Append(Line_IP_Key);
+                        sbJson.Append("\":\"");
+                        sbJson.Append(Line_IP);
+                        sbJson.Append("\"");
+                    }
+                    sbJson.Append("}");
+                    sbJson.Append("],");
+                    sbJson.Append("\"TaskName\":\"");
+                    sbJson.Append(TaskName);
+                    sbJson.Append("\",");
+                    sbJson.Append("\"TestType\":\"");
+                    sbJson.Append(particularTestType);
+                    sbJson.Append("\",");
+                    sbJson.Append("\"TestTimes\":\"");
+                    sbJson.Append(TestCounts);
+                    sbJson.Append("\"");
+                    sbJson.Append("}");
+                    string sql = "insert into instanttest_task (lineTypeName,TaskName,TestTypeName,TestLineList,TestItemName,TestCounts,username,TestDate,TestState,City) values('" + lineTypeName + "','" + TaskName + "','" + particularTestType + "','" + testLine + "','" + TestItemName2 + "','" + TestCounts + "','" + username + "','" + TestDate + "','" + TestState + "','" + city + "');";
+                    WebClient web2 = new WebClient();
+                    try
+                    {
+                        WebHeaderCollection headers = new WebHeaderCollection();
+                        headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded; charset=GB2312";
+                        web2.Headers = headers;
+                        string url = string.Format(ConnConfig.WebAPI + "ImmediateTest");
+                        string data = "TaskContent=" + base.Server.UrlEncode(sbJson.ToString());
+                        string result4 = web2.UploadString(url, "POST", data);
+                        string ja = JsonConvert.DeserializeObject(result4).ToString();
+                        JObject jsonObj = JObject.Parse(ja);
+                        if (!(jsonObj["Result"].ToString().Trim().ToLower() == "true"))
+                        {
+                            string err2 = "后台引擎接收失败，请重新尝试！";
+                            LogToMysql(err2);
+                            return "{\"Success\":false,\"Message\":" + err2 + ",\"Results\":[]}";
+                        }
                         int insertResult = MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, sql);
                         bool flag = true;
                         while (flag)
                         {
-                            result = Encoding.UTF8.GetString(web.DownloadData(ConnConfig.WebAPI + "/ImmediateTest/" + TaskName));
-                            result = result.Trim('"');
+                            result4 = Encoding.UTF8.GetString(web2.DownloadData(ConnConfig.WebAPI + "/ImmediateTest/" + TaskName));
+                            result4 = result4.Trim('"');
                             StringBuilder sb = new StringBuilder();
-                            string[] parts = result.Split(new char[] { ' ', '\n', '\t', '\r', '\f', '\v', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                            string[] parts = result4.Split(new char[7]
+                            {
+                                ' ',
+                                '\n',
+                                '\t',
+                                '\r',
+                                '\f',
+                                '\v',
+                                '\\'
+                            }, StringSplitOptions.RemoveEmptyEntries);
                             int size = parts.Length;
                             for (int i = 0; i < size; i++)
+                            {
                                 sb.AppendFormat("{0}", parts[i]);
-                            result = sb.ToString();
-                            State stateObj = JsonConvert.DeserializeObject<State>(result);
+                            }
+                            result4 = sb.ToString();
+                            State stateObj = JsonConvert.DeserializeObject<State>(result4);
                             switch (stateObj.state)
                             {
                                 case "1":
                                     flag = false;
                                     break;
-
                                 case "-1":
-                                    return "测试失败";
-
+                                    return "{\"Success\":false,\"Message\":任务失败，请检查参数是否错误，并稍后再试,\"Results\":[]}";
                                 case "-2":
-                                    return "测试异常";
+                                    return "{\"Success\":false,\"Message\":后台引擎异常，请稍后再试,\"Results\":[]}";
                             }
                             Thread.Sleep(1000);
                         }
                         string logTable = GetTestTypeLogTable(particularTestType);
-                        string resultSql = "select * from " + logTable + " where TaskName = '" + TaskName + "';";//具体字段后期再协调
+                        string resultSql = "select * from " + logTable + " where TaskName = '" + TaskName + "';";
+                        switch (particularTestType)
+                        {
+                            case "Ping测试":
+                                resultSql = "select `TestTime`,`LineName`,`IP`,`Ping32AvgCost`,`Ping32AvgLost`,`NetJitter32` from " + logTable + " where TaskName = '" + TaskName + "';";
+                                break;
+                            case "网页测试":
+                                resultSql = "select `TestTime`,`LineName`,`URL`,`TimeCost90p`,`Ping32AvgCost`,`Ping32AvgLost`,`NetJitter32` from " + logTable + " where TaskName = '" + TaskName + "';";
+                                break;
+                            case "DNS测试":
+                                resultSql = "select `TestTime`,`LineName`,`ResolverCostTime` from " + logTable + " where TaskName = '" + TaskName + "';";
+                                break;
+                            case "语音测试":
+                                resultSql = "select `TestTime`,`Ping32AvgCost`,`Ping32AvgLost`,`NetJitter32`,`DialSuccessRate` from " + logTable + " where TaskName = '" + TaskName + "';";
+                                break;
+                            case "短彩测试":
+                                resultSql = "select `TestTime`,`IPAddress`,`TraceRoute`,`SiteName` from " + logTable + " where TaskName = '" + TaskName + "';";
+                                break;
+                        }
                         DataTable resultTable = MySqlHelper.ExecuteDataset(ConnConfig.DBConnLog, resultSql).Tables[0];
                         LogToMysql(DataTable2Json(resultTable));
-                        return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":[{" + DataTable2Json(resultTable) + "}]}";
+                        return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":" + DataTable2Json(resultTable) + "}";
                     }
-                    else
+                    catch (Exception)
                     {
-                        //return "后台引擎接收失败，请重新尝试！";
                         string err = "后台引擎接收失败，请重新尝试！";
                         LogToMysql(err);
                         return "{\"Success\":false,\"Message\":" + err + ",\"Results\":[]}";
                     }
-                }
-                catch (Exception)
-                {
-                    //return err.ToString();
-                    string err = "后台引擎接收失败，请重新尝试！";
-                    LogToMysql(err);
-                    return "{\"Success\":false,\"Message\":" + err + ",\"Results\":[]}";
-                    //QLog.SendLog("【连通性验证】异常：" + err.Message.ToString() + err.ToString());
-                    //ScriptManager.RegisterStartupScript(this.Page, this.GetType(), "action", "alert('后台引擎接收异常，请重新尝试！');", true);
-                }
-                finally
-                {
-                    if (web != null)
+                    finally
                     {
-                        web.Dispose();
-                        web = null;
+                        if (web2 != null)
+                        {
+                            web2.Dispose();
+                            web2 = null;
+                        }
                     }
                 }
-                #endregion 发送任务到接口
-            }
-            catch (Exception ex)
-            {
-                return "{\"Success\":false,\"Message\":" + ex.Message + ",\"Results\":[]}";
-            }
-            //UserOperateLogInsert.Insert("连通性验证", "进行验证", "配置语句：" + sql.ToString());//操作日志
-        }
-        #endregion
-
-        #region 登陆系统
-        [WebMethod(Description = "登陆系统")]
-        public string LogIn(string username, string password)
-        {
-            try
-            {
-                password = PASSWORDMD5(password);
-                string sql = @"select userinfo.id,userinfo.UserName,userinfo.RealName,
-userrole.id as UserRoleId,userrole.RoleName from userinfo,userrole WHERE userinfo.UserRoleID=userrole.ID and userinfo.username='" + username + "' and userinfo.UserPassword='" + password + "';";
-                DataTable dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sql).Tables[0];
-                int result = 1;
-                if (dt.Rows.Count > 0)
-                {
-                    result = 0;//成功
-                }
-                else
-                {
-                    result = 1;//登陆失败
-                }
-                string resultStr = JsonConvert.SerializeObject(result);
-                return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":[{" + resultStr + "}]}";
-                /*
-                Context.Response.Charset = "UTF-8";
-                Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
-                Context.Response.Write("{\"Success\":true,\"Message\":\"操作成功\",\"Results\":[{" + resultStr + "}]}");
-                Context.Response.End();
-                */
+                string err3 = "所测专线不在系统支持范围！";
+                return "{\"Success\":false,\"Message\":" + err3 + ",\"Results\":[]}";
             }
             catch (Exception ex)
             {
                 return "{\"Success\":false,\"Message\":" + ex.Message + ",\"Results\":[]}";
             }
         }
-        #endregion
 
-        #region 查看专线清单
-        [WebMethod(Description = "查看专线清单")]
-        public string ShowLines(string lineType)
-        {
-            try
-            {
-                string tableName = GetLineTypeGuardTable(lineType);
-                string sql = "select * from " + tableName;
-                DataTable dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sql).Tables[0];
-                return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":[{" + DataTable2Json(dt) + "}]}";
-
-            }
-            catch (Exception ex)
-            {
-                return "{\"Success\":false,\"Message\":" + ex.Message + ",\"Results\":[]}";
-            }
-
-        }
-        #endregion
-
-        #region 获取短信白名单
-        /// <summary>
-        /// 获取短信白名单
-        /// </summary>
-        /// <returns></returns>
-        [WebMethod(Description = "获取短信白名单")]
-        public string GetWhitePhoneNumbers()
-        {
-            try
-            {
-                Dictionary<string, string> whitePhoneNumbers = new Dictionary<string, string>();
-                string sqlTask = @"select id,name,phone from phonewhitelist  order by CONVERT(name USING gbk) asc";
-                DataTable dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlTask).Tables[0];
-                return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":[{" + DataTable2Json(dt) + "}]}";//;
-            }
-            catch (Exception ex)
-            {
-                return "{\"Success\":false,\"Message\":" + ex.Message + ",\"Results\":[]}";
-            }
-        }
-        #endregion 获取短信白名单
-
-        #region 查看测试历史记录
-        /// <summary>
-        /// 获取即时测试的历史纪录
-        /// </summary>
-        /// <param name="username">用户名</param>
-        /// <param name="lineTypeName">eg：互联网专线</param>
-        /// <param name="area">eg:省公司</param>
-        /// <returns></returns>
         [WebMethod(Description = "查看历史测试记录")]
-        public string ShowTestHistory(string username, string lineTypeName, string area)
+        public void ShowTestHistory(string lineTypeName)
+        {
+            ResponseJson(GetTestHistory(lineTypeName));
+        }
+
+        private string GetTestHistory(string lineTypeName)
         {
             try
             {
-                string sqlList = string.Format("select * from instanttest_task where IF(ISNULL(City),'',City)='{0}' and linetypename='{1}' and UserName = '{2}'", area, lineTypeName, username);
-                DataTable dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnLog, sqlList).Tables[0];
-                return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":[{" + DataTable2Json(dt) + "}]}";
+                string sqlList = string.Format("select `LineTypeName`,`TestTypeName`,`TestLineList`,`TestDate`,`TestState` from instanttest_task where linetypename='{0}'", lineTypeName);
+                DataTable dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlList).Tables[0];
+                return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":" + DataTable2Json(dt) + "}";
             }
             catch (Exception ex)
             {
                 return "{\"Success\":false,\"Message\":" + ex.Message + ",\"Results\":[]}";
             }
         }
-        #endregion 
 
-        #region 获取拨测历史结果
-        /// <summary>
-        /// 获取历史拨测结果
-        /// </summary>
-        /// <param name="particularTestType">Ping测试</param>
-        /// <param name="lineTypeName"></param>
-        /// <param name="area"></param>
-        /// <returns></returns>
-        [WebMethod(Description = "获取历史拨测结果")]
-        public string GetPreviousResults(string particularTestType)
+        [WebMethod(Description = "获取即时测试历史结果")]
+        public void GetPreviousResults(string particularTestType)
+        {
+            ResponseJson(PreviousResults(particularTestType));
+        }
+
+        private string PreviousResults(string particularTestType)
         {
             try
             {
                 string logTable = GetTestTypeLogTable(particularTestType);
-                string resultSql = "select * from " + logTable;//具体字段后期再协调
+                string resultSql = "select * from " + logTable;
+                switch (particularTestType)
+                {
+                    case "Ping测试":
+                        resultSql = "select `TestTime`,`LineName`,`IP`,`Ping32AvgCost`,`Ping32AvgLost`,`NetJitter32` from " + logTable + ";";
+                        break;
+                    case "网页测试":
+                        resultSql = "select `TestTime`,`LineName`,`URL`,`TimeCost90p`,`Ping32AvgCost`,`Ping32AvgLost`,`NetJitter32` from " + logTable + ";";
+                        break;
+                    case "DNS测试":
+                        resultSql = "select `TestTime`,`LineName`,`ResolverCostTime` from " + logTable + ";";
+                        break;
+                    case "语音测试":
+                        resultSql = "select `TestTime`,`Ping32AvgCost`,`Ping32AvgLost`,`NetJitter32`,`DialSuccessRate` from " + logTable + ";";
+                        break;
+                    case "短彩测试":
+                        resultSql = "select `TestTime`,`IPAddress`,`TraceRoute`,`SiteName` from " + logTable + ";";
+                        break;
+                }
                 DataTable dt = MySqlHelper.ExecuteDataset(ConnConfig.DBConnLog, resultSql).Tables[0];
-                return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":[{" + DataTable2Json(dt) + "}]}";
+                return "{\"Success\":true,\"Message\":\"操作成功\",\"Results\":" + DataTable2Json(dt) + "}";
             }
             catch (Exception ex)
             {
                 return "{\"Success\":false,\"Message\":" + ex.Message + ",\"Results\":[]}";
             }
         }
-        #endregion
 
-        #endregion
-
-        #region 辅助方法
-
-        #region DataTable转化成Json
         private string DataTable2Json(DataTable dt)
         {
             List<Dictionary<string, object>> list = new List<Dictionary<string, object>>();
-            foreach (DataRow dr in dt.Rows)
+            foreach (DataRow row in dt.Rows)
             {
                 Dictionary<string, object> result = new Dictionary<string, object>();
-                foreach (DataColumn dc in dt.Columns)
+                foreach (DataColumn column in dt.Columns)
                 {
-                    result.Add(dc.ColumnName, dr[dc].ToString());
+                    result.Add(column.ColumnName, row[column].ToString());
                 }
                 list.Add(result);
             }
             return JsonConvert.SerializeObject(list);
         }
-        #endregion DataTable转化成Json
 
-        #region 根据专线类型获取档案信息表
-        /// <summary>
-        /// 根据专线类型获取档案信息表,eg传入“互联网专线”得到保存互联网专线的表
-        /// </summary>
-        /// <param name="LineType">eg:互联网专线</param>
-        /// <returns></returns>
         private string GetLineTypeGuardTable(string LineType)
         {
             string result = string.Empty;
@@ -408,9 +345,6 @@ userrole.id as UserRoleId,userrole.RoleName from userinfo,userrole WHERE userinf
             }
             return result;
         }
-        #endregion 根据专线类型获取档案信息表
-
-        #region 向数据库中写日志
 
         private void LogToMysql(string logmessage)
         {
@@ -418,30 +352,15 @@ userrole.id as UserRoleId,userrole.RoleName from userinfo,userrole WHERE userinf
             MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnLog, logSql);
         }
 
-        #endregion
-
-        #region MD5加密方式
-        /// <summary>
-        /// MD5加密,数据库中保存的是密码加密后的字符串
-        /// </summary>
-        /// <param name="password"></param>
-        /// <returns></returns>
         public string PASSWORDMD5(string password)
         {
-            System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
-            byte[] bytes = new byte[16];
-            System.Text.ASCIIEncoding asc = new System.Text.ASCIIEncoding();
-            bytes = md5.ComputeHash(asc.GetBytes(password));
-            return Convert.ToBase64String(bytes);
+            MD5 md5 = MD5.Create();
+            byte[] bytes2 = new byte[16];
+            ASCIIEncoding asc = new ASCIIEncoding();
+            bytes2 = md5.ComputeHash(asc.GetBytes(password));
+            return Convert.ToBase64String(bytes2);
         }
-        #endregion MD5加密方式
 
-        #region 获取即时拨测日志表
-        /// <summary>
-        /// 根据专线类型获取即时拨测日志表
-        /// </summary>
-        /// <param name="TestType">eg:互联网测试</param>
-        /// <returns></returns>
         private static string GetTestTypeLogTable(string TestType)
         {
             string result = string.Empty;
@@ -453,8 +372,97 @@ userrole.id as UserRoleId,userrole.RoleName from userinfo,userrole WHERE userinf
             }
             return result;
         }
-        #endregion 根据专线类型获取即时拨测日志表
 
-        #endregion
+        /*
+         * 测试类型
+任务名称
+失效时间
+测试时间点
+测试轮数
+专线名称
+被测项目名称
+被测项目地址
+
+         */
+
+        /// <summary>
+        /// 建立巡检任务
+        /// </summary>
+        /// <param name="testType">测试类型 eg:Ping测试</param>
+        /// <param name="taskName">任务名称 eg:A日常游戏巡检</param>
+        /// <param name="stopTime">失效时间 eg:2018-10-18 14:38:13</param>
+        /// <param name="times">测试时间点 eg:1,3,5,7,9,11,13,15,17,19,21,23</param>
+        /// <param name="count">测试轮数 eg:1</param>
+        /// <param name="lineNames">专线名称 eg:合肥民创中心互联网专线</param>
+        /// <param name="ipByName">序列化的字典值，测试项目名称：测试项目地址 eg:地下城与勇士江苏二区:180.96.59.195</param>
+        /// <returns>执行情况</returns>
+        private string PostScheduleTask(string testType, string taskName,string stopTime,string times, string count, string lineNames,string ipByNameStr)
+        {
+            #region 参数解析与验证
+
+            List<string> testTypes = new List<string>(ConnConfig.TestTypes);
+            if(!testTypes.Contains(testType))
+            {
+                return OutputStandardization("false", "测试类型非支持类型");
+            }
+
+            if(!DateTime.TryParse(stopTime,out DateTime re))
+            {
+                return OutputStandardization("false", "任务失效时间错误，无法转换成日期格式");
+            }
+
+
+            if(times.Split(',').Select(n => int.TryParse(n, out int resTimes)).Contains(false))
+            {
+                return OutputStandardization("false", "测试时间点错误，含有除数字之外的非法字符");
+            }
+             
+            
+            if(!int.TryParse(count,out int resCount))
+            {
+                return OutputStandardization("false", "轮询次数错误，含有除数字之外的非法字符");
+            }
+
+            var ipByName  = JsonConvert.DeserializeObject<Dictionary<string,string>>(ipByNameStr);
+            foreach(var nametoip in ipByName)
+            {
+                IPAddress.TryParse(nametoip.Value, out IPAddress resIP);
+            }
+
+            var testLines = new List<string>(lineNames.Trim().Split(','));
+            
+            foreach (var line in testLines)
+            {
+                if(testType.Equals("语音测试")||testType.Equals("短彩测试"))
+                {
+                    string lineMatch = "SELECT `TechquickLine`,`EastcomquickLine` FROM `eastcomlinematch`";
+                    DataTable lineMatchTable = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, lineMatch).Tables[0];
+                    DataRow[] matchlineRow = lineMatchTable.Select("EastcomquickLine='" + line + "'");
+                    if (matchlineRow.Length == 0)
+                    {
+                        return OutputStandardization("false", "所测专线不在系统支持范围");
+                    }
+                }
+                
+            }
+            
+            
+
+            #endregion
+        }
+
+
+            private void ResponseJson(string code)
+        {
+            base.Context.Response.Charset = "GB2312";
+            base.Context.Response.ContentEncoding = Encoding.GetEncoding("GB2312");
+            base.Context.Response.Write(code);
+            base.Context.Response.End();
+        }
+
+        private string OutputStandardization(string opResult,string opMessage,string TaskResult ="")
+        {
+            return "{\"Success\":"+ opResult + ",\"Message\":"+ opMessage + ",\"Results\":["+ TaskResult + "]}";
+        }
     }
 }

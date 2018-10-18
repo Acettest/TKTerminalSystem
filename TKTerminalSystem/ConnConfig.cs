@@ -12,5 +12,6 @@ namespace TKTerminalSystem
         public static string reportdb2 = ConfigurationManager.AppSettings["reportdb2"].ToString();//日志库的链接字符串
         public static string SysTitle = ConfigurationManager.AppSettings["SysTitle"].ToString();//日志库的链接字符串
         public static string WebAPI = ConfigurationManager.AppSettings["WebAPI"].ToString();//webAPI接口
+        public static string[] TestTypes = ConfigurationManager.AppSettings["TestType"].Replace(" ","").Split(',');//获取测试类型
     }
 }
