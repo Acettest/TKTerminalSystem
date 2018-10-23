@@ -24,6 +24,18 @@ namespace TKTerminalSystem
             ResponseJson(GetImmediateTest(lineTypeName, particularTestType, testItemUrl, testLine, testItemNameTemp, username));
         }
 
+        [WebMethod(Description = "新建任务")]
+        public void BuildScheduleTask(string testType, string taskName, string stopTime, string times, string count,  string lineNames, string ipByNameStr)
+        {
+            ResponseJson(PostScheduleTask(testType, taskName, stopTime, times, count, lineNames, ipByNameStr));
+        }
+
+                [WebMethod(Description = "删除任务")]
+        public void DeleteScheduleTask(string taskName)
+        {
+             ResponseJson(DeleteTask(taskName));
+        }
+
         private string GetImmediateTest(string lineTypeName, string particularTestType, string testItemUrl, string testLine, string testItemNameTemp, string username)
         {
             try
@@ -373,17 +385,6 @@ namespace TKTerminalSystem
             return result;
         }
 
-        /*
-         * 测试类型
-任务名称
-失效时间
-测试时间点
-测试轮数
-专线名称
-被测项目名称
-被测项目地址
-
-         */
 
         /// <summary>
         /// 建立巡检任务
@@ -393,66 +394,230 @@ namespace TKTerminalSystem
         /// <param name="stopTime">失效时间 eg:2018-10-18 14:38:13</param>
         /// <param name="times">测试时间点 eg:1,3,5,7,9,11,13,15,17,19,21,23</param>
         /// <param name="count">测试轮数 eg:1</param>
+        /// <param name="taskStatus">任务启动状态 1为启用，0为禁用</param>
         /// <param name="lineNames">专线名称 eg:合肥民创中心互联网专线</param>
-        /// <param name="ipByName">序列化的字典值，测试项目名称：测试项目地址 eg:地下城与勇士江苏二区:180.96.59.195</param>
+        /// <param name="ipByName">序列化的字典值，测试项目名称：测试项目地址 eg:{"mshengaiyiqi.com":"www.iqiyi.com","mshengbaidu.com":"www.baidu.com"}</param>
         /// <returns>执行情况</returns>
-        private string PostScheduleTask(string testType, string taskName,string stopTime,string times, string count, string lineNames,string ipByNameStr)
+        private string PostScheduleTask(string testType, string taskName, string stopTime, string times, string count,  string lineNames, string ipByNameStr,string taskStatus="1")
         {
-            #region 参数解析与验证
-
-            List<string> testTypes = new List<string>(ConnConfig.TestTypes);
-            if(!testTypes.Contains(testType))
+            try
             {
-                return OutputStandardization("false", "测试类型非支持类型");
-            }
-
-            if(!DateTime.TryParse(stopTime,out DateTime re))
-            {
-                return OutputStandardization("false", "任务失效时间错误，无法转换成日期格式");
-            }
-
-
-            if(times.Split(',').Select(n => int.TryParse(n, out int resTimes)).Contains(false))
-            {
-                return OutputStandardization("false", "测试时间点错误，含有除数字之外的非法字符");
-            }
-             
-            
-            if(!int.TryParse(count,out int resCount))
-            {
-                return OutputStandardization("false", "轮询次数错误，含有除数字之外的非法字符");
-            }
-
-            var ipByName  = JsonConvert.DeserializeObject<Dictionary<string,string>>(ipByNameStr);
-            foreach(var nametoip in ipByName)
-            {
-                IPAddress.TryParse(nametoip.Value, out IPAddress resIP);
-            }
-
-            var testLines = new List<string>(lineNames.Trim().Split(','));
-            
-            foreach (var line in testLines)
-            {
-                if(testType.Equals("语音测试")||testType.Equals("短彩测试"))
+                #region 参数验证
+                List<string> testTypes = new List<string>(ConnConfig.TestTypes);
+                if (!testTypes.Contains(testType))
                 {
-                    string lineMatch = "SELECT `TechquickLine`,`EastcomquickLine` FROM `eastcomlinematch`";
-                    DataTable lineMatchTable = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, lineMatch).Tables[0];
-                    DataRow[] matchlineRow = lineMatchTable.Select("EastcomquickLine='" + line + "'");
-                    if (matchlineRow.Length == 0)
+                    return OutputStandardization("false", string.Format("测试类型{0}非支持类型", testType));
+                }
+
+                DateTime re;
+                if (!DateTime.TryParse(stopTime, out re))
+                {
+                    return OutputStandardization("false", "任务失效时间错误，无法转换成日期格式");
+                }
+
+                int resTimes;
+                if (times.Split(',').Select(n => int.TryParse(n, out resTimes)).Contains(false))
+                {
+                    return OutputStandardization("false", "测试时间点错误，含有除数字之外的非法字符");
+                }
+
+                int resCount;
+                if (!int.TryParse(count, out resCount))
+                {
+                    return OutputStandardization("false", string.Format("轮询次数{0}错误，含有除数字之外的非法字符", count));
+                }
+
+                if ((taskStatus.Trim() != "0") && (taskStatus.Trim() != "1"))
+                {
+                    return OutputStandardization("false", string.Format("任务状态{0}错误，0为禁用，1为启用", taskStatus));
+                }
+                //转换被测ip
+                
+                var ipByName = JsonConvert.DeserializeObject<Dictionary<string, string>>(ipByNameStr);
+
+                //foreach (var nametoip in ipByName)
+                //{
+                //    bool isUrl = false;
+                //    foreach (var iporurlChar in nametoip.Value)
+                //    {
+                //        if (Char.IsLetter(iporurlChar))
+                //        {
+                //            isUrl = true;
+                //            break;
+                //        }
+                //    }
+                //    if (!isUrl)
+                //    {
+                //        IPAddress resIP;
+                //        if (!IPAddress.TryParse(nametoip.Value, out resIP))
+                //        {
+                //            return OutputStandardization("false", string.Format("被测地址{0}既非url，也非IP", nametoip.Value));
+                //        }
+                //    }
+                //}
+
+                #region 检查任务名是否合法
+                if (string.IsNullOrWhiteSpace(taskName))
+                {
+                    return OutputStandardization("false", string.Format("任务名称{0}不可为空，请重新分配任务名", taskName));
+                }
+                string sqlCheck = "select id from task_config where TaskName='" + taskName + "'";
+                DataSet dsCheck = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlCheck);
+                if (dsCheck.Tables[0].Rows.Count > 0)
+                {
+                    return OutputStandardization("false", string.Format("任务名称{0}已存在，请重新分配任务名", taskName));
+                }
+                #endregion
+                //获取所测专线
+                var testLines = new List<string>(lineNames.Trim().Split(','));
+                List<string> eastCom2LocalLine = new List<string>();//短彩和语音匹配的拨测系统内的专线
+                foreach (var line in testLines)
+                {
+                    if (testType.Equals("语音测试") || testType.Equals("短彩测试"))
                     {
-                        return OutputStandardization("false", "所测专线不在系统支持范围");
+                        string lineMatch = "SELECT `TechquickLine`,`EastcomquickLine` FROM `eastcomlinematch`";
+                        DataTable lineMatchTable = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, lineMatch).Tables[0];
+                        DataRow[] matchlineRow = lineMatchTable.Select("EastcomquickLine='" + line + "'");
+                        if (matchlineRow.Length == 0)
+                        {
+                            return OutputStandardization("false", string.Format("所测专线{0}不在系统支持范围", line));
+                        }
+                        else
+                        {
+                            eastCom2LocalLine.Add(matchlineRow[0][0].ToString().Trim());
+                        }
+                    }
+                    else
+                    {
+                        eastCom2LocalLine.Add(line.Trim());
                     }
                 }
-                
-            }
-            
-            
 
-            #endregion
+                if (testLines.Contains("平台侧") && testLines.Count() > 1)
+                {
+                    return OutputStandardization("false", string.Format("同一个任务中，所测专线信息不能既包含“平台侧”，又包含其他专线"));
+                }
+                #endregion
+                int isProvinceCompanyTask = 0;//1 为是省平台任务，0为非省平台任务 针对数据库中IsPorL字段
+                if (testLines.Contains("平台侧"))
+                {
+                    isProvinceCompanyTask = 1;
+                }
+
+                string lineTableSql = @"select  LineTypeName,GuardInfoTable from linetype where LineTypeTestType like ";//末尾有空格
+                if (testType.Trim().Equals("Ping测试") || testType.Trim().Equals("网页测试") || testType.Trim().Equals("DNS测试"))
+                {
+                    lineTableSql =string.Format("{0}'%Ping测试、网页测试%'",lineTableSql);
+                }
+                else
+                {
+                    lineTableSql = string.Format("{0}'%{1}%'",lineTableSql,testType);
+                }
+                var lineInfoRes = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, lineTableSql).Tables[0].Rows[0];
+                string lineType = lineInfoRes["LineTypeName"].ToString();
+                var tableLineBelongsTo = lineInfoRes["GuardInfoTable"].ToString();
+
+                StringBuilder sb = new StringBuilder();
+                //Remark 0 表示东信公司，给东信公司做的接口
+                sb.Append("insert into task_config (TaskName,TestType,TaskEndTime,");
+                sb.Append("TestTimes,TestHours,TaskStatus,Remark,TestTypeAlias,LineType,IsPorL) values");
+                sb.Append(" ('" + taskName + "','" + testType + "','" + stopTime
+                    + "','" + count + "','" + times + "'," + taskStatus
+                    + ",'" + "0" + "','" + string.Empty + "','" + lineType + "','" + isProvinceCompanyTask + "');");
+                int TaskInsert = MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, sb.ToString());
+
+                //UserOperateLogInsert.Insert("巡检任务", "基本信息入库", "配置语句：" + sb.ToString());
+                string sqlTaskID = "select id from task_config where TaskName='" + taskName + "'";
+                DataSet dsTaskID = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlTaskID);
+                if (dsTaskID.Tables[0].Rows.Count > 0)
+                {
+
+                    string TaskID = dsTaskID.Tables[0].Rows[0]["id"].ToString();
+                    foreach (var line in eastCom2LocalLine)
+                    {
+                        string lineconfigSql = string.Format("select A.ID, A.LineName,B.LineType,A.TerminalID,A.City,A.LineKey from {0} as A left join terminal as B on A.TerminalID = B.ID where  LineName like '%{1}%' ", tableLineBelongsTo, line);
+                        var lineConfigRes = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, lineconfigSql).Tables[0].Rows[0];
+                        //string insertLineConfigSql = string.Format("insert into taskline_config (ID,LineName,LineType,TerminalID,City,LineKey) values ('{0}','{1}','{2}','{3}','{4}','{5}')", Guid.NewGuid().ToString(), lineConfigRes[1], lineConfigRes[2], lineConfigRes[3], lineConfigRes[4], lineConfigRes[5]);
+                        string insertTaskLineConfig = string.Format("insert into taskline_config (`TerminalID`,`LineID`,`TaskID`,`LineTable`,`LineName`) values ('{0}','{1}','{2}','{3}','{4}')", lineConfigRes[2], lineConfigRes[0], TaskID, tableLineBelongsTo, line);
+                        MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, insertTaskLineConfig);
+
+
+                    }
+
+                    StringBuilder sbLineAndItem = new StringBuilder();
+                    int num = 0;
+                    foreach (var nameToIP in ipByName)
+                    {
+                        //因为语音测试和短彩测试因为某种原因在数据库中保存的字段是反的，所以在此处进行特殊处理
+                        string testItemName = (testType.Equals("语音测试") || testType.Equals("短彩测试")) ? nameToIP.Value : nameToIP.Key;
+                        string testItemUrl = (testType.Equals("语音测试") || testType.Equals("短彩测试")) ? nameToIP.Key : nameToIP.Value;
+                        string testItemEngine = "ping,tracert";
+                        string testItemRemark = string.Empty;
+                        sbLineAndItem.Append("insert into testitem_config (TaskID,TestItemName");
+                        sbLineAndItem.Append(",TestItemUrl,TestItemEngine,TestItemRemark,IsPorL) values");
+                        sbLineAndItem.Append("(" + TaskID + ",'" + testItemName + "'");
+                        sbLineAndItem.Append(",'" + testItemUrl + "'");
+                        sbLineAndItem.Append(",'" + testItemEngine + "'");
+                        sbLineAndItem.Append(",'" + testItemRemark + "'");
+                        sbLineAndItem.Append(",'" + isProvinceCompanyTask + "');");
+
+                        num++;
+                        if (num > 10)
+                        {
+                            MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, sbLineAndItem.ToString());
+                            sbLineAndItem = new StringBuilder();
+                        }
+                    }
+
+                    MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, sbLineAndItem.ToString());
+                    sbLineAndItem = new StringBuilder();
+
+                    return OutputStandardization("true", string.Format("新建任务{0}成功", taskName));
+                }
+                else
+                {
+                    return OutputStandardization("false", string.Format("新建任务{0}在任务保存时失败", taskName));
+                }
+            }
+            catch (Exception ex)
+            {
+                return OutputStandardization("false", string.Format("新建任务{0}失败，原因{1}", taskName, ex.ToString()));
+            }
         }
 
+        private string DeleteTask(string taskName)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+                string sqlTaskID = "select id from task_config where TaskName='" + taskName + "'";
+                DataSet dsTaskID = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlTaskID);
+                if (dsTaskID.Tables[0].Rows.Count == 0)
+                {
+                    return OutputStandardization("false", string.Format("删除任务{0}失败，该任务在系统中无记录", taskName));
+                }
+                string TaskID = dsTaskID.Tables[0].Rows[0]["id"].ToString();
 
-            private void ResponseJson(string code)
+                //删除任务信息
+                sb.Append("delete from task_config where id=");
+                sb.Append(TaskID);
+                sb.Append(";");
+                //删除任务和专线关系表
+                sb.Append("delete from taskline_config where taskid=");
+                sb.Append(TaskID);
+                sb.Append(";");
+                //删除任务网元信息表
+                sb.Append("delete from testitem_config where taskid=");
+                sb.Append(TaskID);
+                sb.Append(";");
+                return OutputStandardization("true", string.Format("任务{0}删除成功", taskName));
+            }catch(Exception ex)
+            {
+                return OutputStandardization("false", string.Format("删除任务{0}失败，原因：{1}", taskName,ex.ToString()));
+            }
+        }
+
+        private void ResponseJson(string code)
         {
             base.Context.Response.Charset = "GB2312";
             base.Context.Response.ContentEncoding = Encoding.GetEncoding("GB2312");
@@ -460,9 +625,9 @@ namespace TKTerminalSystem
             base.Context.Response.End();
         }
 
-        private string OutputStandardization(string opResult,string opMessage,string TaskResult ="")
+        private string OutputStandardization(string opResult, string opMessage, string TaskResult = "")
         {
-            return "{\"Success\":"+ opResult + ",\"Message\":"+ opMessage + ",\"Results\":["+ TaskResult + "]}";
+            return "{\"Success\":" + opResult + ",\"Message\":" + opMessage + ",\"Results\":[" + TaskResult + "]}";
         }
     }
 }
