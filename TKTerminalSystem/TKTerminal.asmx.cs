@@ -610,6 +610,7 @@ namespace TKTerminalSystem
                 sb.Append("delete from testitem_config where taskid=");
                 sb.Append(TaskID);
                 sb.Append(";");
+                MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, sb.ToString());
                 return OutputStandardization("true", string.Format("任务{0}删除成功", taskName));
             }catch(Exception ex)
             {
