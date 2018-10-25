@@ -538,7 +538,7 @@ namespace TKTerminalSystem
                         string lineconfigSql = string.Format("select A.ID, A.LineName,B.LineType,A.TerminalID,A.City,A.LineKey from {0} as A left join terminal as B on A.TerminalID = B.ID where  LineName like '%{1}%' ", tableLineBelongsTo, line);
                         var lineConfigRes = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, lineconfigSql).Tables[0].Rows[0];
                         //string insertLineConfigSql = string.Format("insert into taskline_config (ID,LineName,LineType,TerminalID,City,LineKey) values ('{0}','{1}','{2}','{3}','{4}','{5}')", Guid.NewGuid().ToString(), lineConfigRes[1], lineConfigRes[2], lineConfigRes[3], lineConfigRes[4], lineConfigRes[5]);
-                        string insertTaskLineConfig = string.Format("insert into taskline_config (`TerminalID`,`LineID`,`TaskID`,`LineTable`,`LineName`) values ('{0}','{1}','{2}','{3}','{4}')", lineConfigRes[2], lineConfigRes[0], TaskID, tableLineBelongsTo, line);
+                        string insertTaskLineConfig = string.Format("insert into taskline_config (`TerminalID`,`LineID`,`TaskID`,`LineTable`,`LineName`) values ('{0}','{1}','{2}','{3}','{4}')", lineConfigRes[3], lineConfigRes[0], TaskID, tableLineBelongsTo, line);
                         MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, insertTaskLineConfig);
 
 
