@@ -521,9 +521,9 @@ namespace TKTerminalSystem
                 //Remark 0 表示东信公司，给东信公司做的接口
                 sb.Append("insert into task_config (TaskName,TestType,TaskEndTime,");
                 sb.Append("TestTimes,TestHours,TaskStatus,Remark,TestTypeAlias,LineType,IsPorL) values");
-                sb.Append(" ('" + taskName + "','" + testType + "','" + stopTime
-                    + "','" + count + "','" + times + "'," + taskStatus
-                    + ",'" + "0" + "','" + string.Empty + "','" + lineType + "','" + isProvinceCompanyTask + "');");
+                sb.Append(" ('" + taskName.Trim() + "','" + testType.Trim() + "','" + stopTime.Trim()
+                    + "','" + count.Trim() + "','" + times.Trim() + "'," + taskStatus.Trim()
+                    + ",'" + "0" + "','" + string.Empty + "','" + lineType.Trim() + "','" + isProvinceCompanyTask + "');");
                 int TaskInsert = MySqlHelper.ExecuteNonQuery(ConnConfig.DBConnConfig, sb.ToString());
 
                 //UserOperateLogInsert.Insert("巡检任务", "基本信息入库", "配置语句：" + sb.ToString());
@@ -555,9 +555,9 @@ namespace TKTerminalSystem
                         string testItemRemark = string.Empty;
                         sbLineAndItem.Append("insert into testitem_config (TaskID,TestItemName");
                         sbLineAndItem.Append(",TestItemUrl,TestItemEngine,TestItemRemark,IsPorL) values");
-                        sbLineAndItem.Append("(" + TaskID + ",'" + testItemName + "'");
-                        sbLineAndItem.Append(",'" + testItemUrl + "'");
-                        sbLineAndItem.Append(",'" + testItemEngine + "'");
+                        sbLineAndItem.Append("(" + TaskID.Trim() + ",'" + testItemName.Trim() + "'");
+                        sbLineAndItem.Append(",'" + testItemUrl.Trim() + "'");
+                        sbLineAndItem.Append(",'" + testItemEngine.Trim() + "'");
                         sbLineAndItem.Append(",'" + testItemRemark + "'");
                         sbLineAndItem.Append(",'" + isProvinceCompanyTask + "');");
 
@@ -590,7 +590,7 @@ namespace TKTerminalSystem
             try
             {
                 StringBuilder sb = new StringBuilder();
-                string sqlTaskID = "select id from task_config where TaskName='" + taskName + "'";
+                string sqlTaskID = "select id from task_config where TaskName='" + taskName.Trim() + "'";
                 DataSet dsTaskID = MySqlHelper.ExecuteDataset(ConnConfig.DBConnConfig, sqlTaskID);
                 if (dsTaskID.Tables[0].Rows.Count == 0)
                 {
